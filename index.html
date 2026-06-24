@@ -159,6 +159,8 @@
                                 />
                             </div>
                         </div>
+                    </div>
+                </div>
                 <div class="sticky bottom-6 bg-white p-4 rounded-xl shadow-xl border border-slate-200 flex flex-col items-end gap-3">
                     <div v-if="pdfErrorMessage" class="w-full p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
                         {{ pdfErrorMessage }}
@@ -188,6 +190,9 @@
                 const isGenerating = ref(false);
                 const errorMessage = ref("");
                 const pdfErrorMessage = ref("");
+                
+                // Cache the fetched font so we don't re-download it every time
+                let cachedPTSerifBase64 = null;
 
                 const handleStartConfig = () => {
                     errorMessage.value = "";
@@ -207,87 +212,116 @@
                     step.value = 2;
                 };
 
-                const generatePDF = () => {
+                const generatePDF = async () => {
                     isGenerating.value = true;
                     pdfErrorMessage.value = "";
                     
-                    // Add slight delay to allow UI to update to "Generating PDF..." state
-                    setTimeout(() => {
+                    try {
+                        const { jsPDF } = window.jspdf;
+                        const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+                        
+                        // Try to load PT Serif dynamically
+                        let mainFont = "times";
                         try {
-                            const { jsPDF } = window.jspdf;
-                            const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-                            
-                            // A4 Dimensions in mm
-                            const pageWidth = 210;
-                            const pageHeight = 297;
-                            
-                            // Layout Settings
-                            const leftMargin = 25;
-                            const topMargin = 15;
-                            const rightMargin = pageWidth - 25; // 185
-                            const bottomMargin = pageHeight - 15; // 282
-
-                            const drawLayout = (footerMark) => {
-                                doc.setDrawColor(0, 0, 0);
-                                doc.setLineWidth(0.3);
-                                
-                                // Lines
-                                doc.line(leftMargin, topMargin, leftMargin, bottomMargin);
-                                doc.line(rightMargin, topMargin, rightMargin, bottomMargin);
-                                
-                                // Footer
-                                doc.setFont("times", "italic");
-                                doc.setFontSize(12);
-                                doc.text(footerMark, leftMargin - 10, bottomMargin + 5);
-                                
-                                // Right Side Warning Text
-                                doc.setFont("times", "normal");
-                                doc.setFontSize(9);
-                                const warningText = "Candidates must not write on this margin";
-                                const splitWarning = doc.splitTextToSize(warningText, 20);
-                                doc.text(splitWarning, rightMargin + 2, topMargin + 5);
-                            };
-
-                            questions.value.forEach((q, qIndex) => {
-                                const pages = parseInt(q.pages) || 1;
-                                
-                                for (let i = 0; i < pages; i++) {
-                                    if (qIndex !== 0 || i !== 0) {
-                                        doc.addPage();
-                                    }
+                            if (!cachedPTSerifBase64) {
+                                // Fetch the TTF file directly from Google Fonts static domain
+                                const fontResponse = await fetch('https://fonts.gstatic.com/s/ptserif/v18/EJRVQgYoZZY2vCFuvDFRxL6ddA.ttf');
+                                if (fontResponse.ok) {
+                                    const buffer = await fontResponse.arrayBuffer();
                                     
-                                    drawLayout(testName.value);
+                                    // Convert ArrayBuffer to Base64 safely
+                                    let binary = '';
+                                    const bytes = new Uint8Array(buffer);
+                                    for (let i = 0; i < bytes.byteLength; i++) {
+                                        binary += String.fromCharCode(bytes[i]);
+                                    }
+                                    cachedPTSerifBase64 = window.btoa(binary);
+                                }
+                            }
+                            
+                            // If successfully fetched (or cached), add it to jsPDF
+                            if (cachedPTSerifBase64) {
+                                doc.addFileToVFS('PTSerif-Regular.ttf', cachedPTSerifBase64);
+                                doc.addFont('PTSerif-Regular.ttf', 'PTSerif', 'normal');
+                                mainFont = "PTSerif";
+                            }
+                        } catch (fontError) {
+                            console.warn("Could not load PT Serif font, falling back to Times.", fontError);
+                        }
 
-                                    // Print the question text only on the FIRST page allocated
-                                    if (i === 0) {
-                                        doc.setFont("times", "normal");
-                                        doc.setFontSize(12);
-                                        doc.text(`Q. ${qIndex + 1}`, leftMargin - 15, topMargin + 5, { align: 'center' });
+                        // A4 Dimensions in mm
+                        const pageWidth = 210;
+                        const pageHeight = 297;
+                        
+                        // Layout Settings
+                        const leftMargin = 25;
+                        const topMargin = 15;
+                        const rightMargin = pageWidth - 25; // 185
+                        const bottomMargin = pageHeight - 15; // 282
 
-                                        const qTextX = leftMargin + 2;
-                                        const qTextY = topMargin + 5;
-                                        const qTextWidth = rightMargin - leftMargin - 4;
-                                        
-                                        doc.text(q.qText, qTextX, qTextY, { maxWidth: qTextWidth, align: 'justify' });
+                        const drawLayout = (footerMark) => {
+                            doc.setDrawColor(0, 0, 0);
+                            doc.setLineWidth(0.3);
+                            
+                            // Lines
+                            doc.line(leftMargin, topMargin, leftMargin, bottomMargin);
+                            doc.line(rightMargin, topMargin, rightMargin, bottomMargin);
+                            
+                            // Footer (Always Times, Italic)
+                            doc.setFont("times", "italic");
+                            doc.setFontSize(12);
+                            doc.text(footerMark, leftMargin - 10, bottomMargin + 5);
+                            
+                            // Right Side Warning Text (Always Times, Normal)
+                            doc.setFont("times", "normal");
+                            doc.setFontSize(9);
+                            const warningText = "Candidates must not write on this margin";
+                            const splitWarning = doc.splitTextToSize(warningText, 20);
+                            doc.text(splitWarning, rightMargin + 2, topMargin + 5);
+                        };
 
-                                        if (q.marks) {
-                                            const textDims = doc.getTextDimensions(q.qText, { maxWidth: qTextWidth });
-                                            const marksY = qTextY + textDims.h + 5;
-                                            doc.text(`[${q.marks}]`, rightMargin - 2, marksY, { align: 'right' });
-                                        }
+                        questions.value.forEach((q, qIndex) => {
+                            const pages = parseInt(q.pages) || 1;
+                            
+                            for (let i = 0; i < pages; i++) {
+                                if (qIndex !== 0 || i !== 0) {
+                                    doc.addPage();
+                                }
+                                
+                                drawLayout(testName.value);
+
+                                // Print the question text only on the FIRST page allocated
+                                if (i === 0) {
+                                    // Question Number (PT Serif)
+                                    doc.setFont(mainFont, "normal");
+                                    doc.setFontSize(12);
+                                    doc.text(`Q. ${qIndex + 1}`, leftMargin - 15, topMargin + 5, { align: 'center' });
+
+                                    // Question Text (PT Serif)
+                                    const qTextX = leftMargin + 2;
+                                    const qTextY = topMargin + 5;
+                                    const qTextWidth = rightMargin - leftMargin - 4;
+                                    
+                                    doc.text(q.qText, qTextX, qTextY, { maxWidth: qTextWidth, align: 'justify' });
+
+                                    // Marks Stamp (PT Serif)
+                                    if (q.marks) {
+                                        const textDims = doc.getTextDimensions(q.qText, { maxWidth: qTextWidth });
+                                        const marksY = qTextY + textDims.h + 5;
+                                        doc.text(`[${q.marks}]`, rightMargin - 2, marksY, { align: 'right' });
                                     }
                                 }
-                            });
+                            }
+                        });
 
-                            const safeFileName = testName.value.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                            doc.save(`${safeFileName}_qcab.pdf`);
-                        } catch (error) {
-                            console.error("PDF Generation Error:", error);
-                            pdfErrorMessage.value = "An error occurred while generating the PDF: " + (error.message || "Unknown error");
-                        } finally {
-                            isGenerating.value = false;
-                        }
-                    }, 50); // slight timeout for vue responsiveness
+                        const safeFileName = testName.value.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        doc.save(`${safeFileName}_qcab.pdf`);
+                    } catch (error) {
+                        console.error("PDF Generation Error:", error);
+                        pdfErrorMessage.value = "An error occurred while generating the PDF: " + (error.message || "Unknown error");
+                    } finally {
+                        isGenerating.value = false;
+                    }
                 };
 
                 return {
