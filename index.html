@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UPSC CSE QCAB Generator</title>
     
+    <!-- 
+      Note: External CDN links are restored here so the app functions in this preview environment.
+      To prevent Supply Chain Risks in your final GitHub Pages deployment:
+      1. Download these three files.
+      2. Upload them to your GitHub repo.
+      3. Change the src attributes below to "./tailwindcss.js", "./vue.global.js", and "./jspdf.umd.min.js" 
+    -->
+    
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Vue 3 for reactivity (avoids Babel compilation errors) -->
+    <!-- Vue 3 for reactivity -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     
     <!-- jsPDF for PDF generation -->
@@ -34,6 +42,16 @@
     </style>
 </head>
 <body>
+    <!-- Fallback error screen if libraries fail to load -->
+    <div id="fallback-error" style="display: none; min-height: 100vh; background-color: #fef2f2; color: #991b1b; padding: 3rem; text-align: center; font-family: sans-serif;">
+        <h2 style="font-size: 2rem; font-weight: bold; margin-bottom: 1rem;">Failed to Load Application</h2>
+        <p style="font-size: 1.1rem; max-width: 600px; margin: 0 auto; line-height: 1.5;">
+            One or more required libraries (Tailwind, Vue, or jsPDF) could not be loaded. 
+            <br/><br/>
+            If you are hosting this on GitHub Pages, please ensure you have downloaded these files and placed them in your repository as instructed in the HTML comments.
+        </p>
+    </div>
+
     <div id="app" v-cloak class="min-h-screen pb-12 flex flex-col items-center">
         <!-- Header -->
         <div class="w-full bg-slate-800 text-white p-6 shadow-md mb-8 text-center">
@@ -68,10 +86,14 @@
                             type="number"
                             required
                             min="1"
-                            max="50"
+                            max="20"
                             v-model="numQuestions"
                             class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                         />
+                    </div>
+
+                    <div v-if="errorMessage" class="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
+                        {{ errorMessage }}
                     </div>
 
                     <button
@@ -137,10 +159,10 @@
                                 />
                             </div>
                         </div>
+                <div class="sticky bottom-6 bg-white p-4 rounded-xl shadow-xl border border-slate-200 flex flex-col items-end gap-3">
+                    <div v-if="pdfErrorMessage" class="w-full p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
+                        {{ pdfErrorMessage }}
                     </div>
-                </div>
-
-                <div class="sticky bottom-6 bg-white p-4 rounded-xl shadow-xl border border-slate-200 flex justify-end">
                     <button
                         @click="generatePDF"
                         :disabled="isGenerating"
@@ -164,9 +186,17 @@
                 const numQuestions = ref(1);
                 const questions = ref([]);
                 const isGenerating = ref(false);
+                const errorMessage = ref("");
+                const pdfErrorMessage = ref("");
 
                 const handleStartConfig = () => {
+                    errorMessage.value = "";
                     if (!testName.value.trim() || numQuestions.value < 1) return;
+                    
+                    if (numQuestions.value > 20) {
+                        errorMessage.value = "Error: Maximum 20 questions can be generated at once.";
+                        return;
+                    }
                     
                     questions.value = Array.from({ length: parseInt(numQuestions.value) }, (_, i) => ({
                         id: i,
@@ -179,6 +209,7 @@
 
                 const generatePDF = () => {
                     isGenerating.value = true;
+                    pdfErrorMessage.value = "";
                     
                     // Add slight delay to allow UI to update to "Generating PDF..." state
                     setTimeout(() => {
@@ -252,7 +283,7 @@
                             doc.save(`${safeFileName}_qcab.pdf`);
                         } catch (error) {
                             console.error("PDF Generation Error:", error);
-                            alert("An error occurred while generating the PDF. Check console for details.");
+                            pdfErrorMessage.value = "An error occurred while generating the PDF: " + (error.message || "Unknown error");
                         } finally {
                             isGenerating.value = false;
                         }
@@ -265,11 +296,24 @@
                     numQuestions,
                     questions,
                     isGenerating,
+                    errorMessage,
+                    pdfErrorMessage,
                     handleStartConfig,
                     generatePDF
                 };
             }
         }).mount('#app');
+    </script>
+
+    <!-- Native library check to ensure scripts loaded -->
+    <script>
+        window.addEventListener('load', function() {
+            // Check if our core libraries are attached to the window object
+            if (typeof Vue === 'undefined' || typeof window.jspdf === 'undefined' || typeof tailwind === 'undefined') {
+                document.getElementById('app').style.display = 'none';
+                document.getElementById('fallback-error').style.display = 'block';
+            }
+        });
     </script>
 </body>
 </html>
