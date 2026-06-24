@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UPSC CSE QCAB Generator</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Vue 3 for reactivity (avoids Babel compilation errors) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        body {
+            background-color: #f3f4f6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        /* Custom scrollbar for textareas */
+        textarea::-webkit-scrollbar {
+            width: 8px;
+        }
+        textarea::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 4px;
+        }
+        /* Prevents uncompiled template elements from flashing on load */
+        [v-cloak] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" v-cloak class="min-h-screen pb-12 flex flex-col items-center">
+        <!-- Header -->
+        <div class="w-full bg-slate-800 text-white p-6 shadow-md mb-8 text-center">
+            <h1 class="text-3xl font-bold tracking-tight">UPSC CSE QCAB Generator</h1>
+            <p class="text-slate-300 mt-2">Generate standard Question cum Answer Booklets</p>
+        </div>
+
+        <div class="w-full max-w-3xl px-4">
+            <!-- Step 1: Configuration -->
+            <div v-if="step === 1" class="bg-white p-8 rounded-xl shadow-lg border border-slate-100">
+                <h2 class="text-2xl font-semibold mb-6 text-slate-800">Test Configuration</h2>
+                <form @submit.prevent="handleStartConfig">
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">
+                            Test Name / Footer Stamp
+                        </label>
+                        <input
+                            type="text"
+                            required
+                            v-model="testName"
+                            placeholder="e.g. VisionIAS-2024-GS1"
+                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                        <p class="text-xs text-slate-500 mt-1">This will appear at the bottom left of every page.</p>
+                    </div>
+
+                    <div class="mb-8">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">
+                            Total Number of Questions
+                        </label>
+                        <input
+                            type="number"
+                            required
+                            min="1"
+                            max="50"
+                            v-model="numQuestions"
+                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-sm"
+                    >
+                        Continue to Questions
+                    </button>
+                </form>
+            </div>
+
+            <!-- Step 2: Question Data -->
+            <div v-if="step === 2" class="space-y-6">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <button 
+                        @click="step = 1"
+                        class="text-slate-600 hover:text-slate-900 font-medium px-3 py-2 rounded-md hover:bg-slate-100 transition"
+                    >
+                        &larr; Back
+                    </button>
+                    <div class="font-semibold text-slate-800">
+                        {{ testName }} <span class="text-slate-400 mx-2">|</span> {{ numQuestions }} Questions
+                    </div>
+                </div>
+
+                <div v-for="(q, index) in questions" :key="index" class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                    <div class="flex items-center mb-4">
+                        <div class="bg-blue-100 text-blue-800 font-bold w-10 h-10 flex items-center justify-center rounded-full mr-3">
+                            {{ index + 1 }}
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-800">Question {{ index + 1 }}</h3>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Question Text</label>
+                            <textarea
+                                required
+                                rows="3"
+                                v-model="q.qText"
+                                placeholder="Enter question details here..."
+                                class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-y"
+                            ></textarea>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Marks Stamp</label>
+                                <input
+                                    type="text"
+                                    v-model="q.marks"
+                                    placeholder="e.g. 10 Marks, 2023"
+                                    class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Pages Required</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    v-model="q.pages"
+                                    class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sticky bottom-6 bg-white p-4 rounded-xl shadow-xl border border-slate-200 flex justify-end">
+                    <button
+                        @click="generatePDF"
+                        :disabled="isGenerating"
+                        :class="isGenerating ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-lg'"
+                        class="w-full md:w-auto px-8 py-3 rounded-lg font-bold text-white shadow-md transition-all"
+                    >
+                        {{ isGenerating ? "Generating PDF..." : "Download QCAB PDF" }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const step = ref(1);
+                const testName = ref("");
+                const numQuestions = ref(1);
+                const questions = ref([]);
+                const isGenerating = ref(false);
+
+                const handleStartConfig = () => {
+                    if (!testName.value.trim() || numQuestions.value < 1) return;
+                    
+                    questions.value = Array.from({ length: parseInt(numQuestions.value) }, (_, i) => ({
+                        id: i,
+                        qText: "",
+                        marks: "10 Marks",
+                        pages: 2
+                    }));
+                    step.value = 2;
+                };
+
+                const generatePDF = () => {
+                    isGenerating.value = true;
+                    
+                    // Add slight delay to allow UI to update to "Generating PDF..." state
+                    setTimeout(() => {
+                        try {
+                            const { jsPDF } = window.jspdf;
+                            const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+                            
+                            // A4 Dimensions in mm
+                            const pageWidth = 210;
+                            const pageHeight = 297;
+                            
+                            // Layout Settings
+                            const leftMargin = 25;
+                            const topMargin = 15;
+                            const rightMargin = pageWidth - 25; // 185
+                            const bottomMargin = pageHeight - 15; // 282
+
+                            const drawLayout = (footerMark) => {
+                                doc.setDrawColor(0, 0, 0);
+                                doc.setLineWidth(0.3);
+                                
+                                // Lines
+                                doc.line(leftMargin, topMargin, leftMargin, bottomMargin);
+                                doc.line(rightMargin, topMargin, rightMargin, bottomMargin);
+                                
+                                // Footer
+                                doc.setFont("times", "italic");
+                                doc.setFontSize(12);
+                                doc.text(footerMark, leftMargin - 10, bottomMargin + 5);
+                                
+                                // Right Side Warning Text
+                                doc.setFont("times", "normal");
+                                doc.setFontSize(9);
+                                const warningText = "Candidates must not write on this margin";
+                                const splitWarning = doc.splitTextToSize(warningText, 20);
+                                doc.text(splitWarning, rightMargin + 2, topMargin + 5);
+                            };
+
+                            questions.value.forEach((q, qIndex) => {
+                                const pages = parseInt(q.pages) || 1;
+                                
+                                for (let i = 0; i < pages; i++) {
+                                    if (qIndex !== 0 || i !== 0) {
+                                        doc.addPage();
+                                    }
+                                    
+                                    drawLayout(testName.value);
+
+                                    // Print the question text only on the FIRST page allocated
+                                    if (i === 0) {
+                                        doc.setFont("times", "normal");
+                                        doc.setFontSize(12);
+                                        doc.text(`Q. ${qIndex + 1}`, leftMargin - 15, topMargin + 5, { align: 'center' });
+
+                                        const qTextX = leftMargin + 2;
+                                        const qTextY = topMargin + 5;
+                                        const qTextWidth = rightMargin - leftMargin - 4;
+                                        
+                                        doc.text(q.qText, qTextX, qTextY, { maxWidth: qTextWidth, align: 'justify' });
+
+                                        if (q.marks) {
+                                            const textDims = doc.getTextDimensions(q.qText, { maxWidth: qTextWidth });
+                                            const marksY = qTextY + textDims.h + 5;
+                                            doc.text(`[${q.marks}]`, rightMargin - 2, marksY, { align: 'right' });
+                                        }
+                                    }
+                                }
+                            });
+
+                            const safeFileName = testName.value.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                            doc.save(`${safeFileName}_qcab.pdf`);
+                        } catch (error) {
+                            console.error("PDF Generation Error:", error);
+                            alert("An error occurred while generating the PDF. Check console for details.");
+                        } finally {
+                            isGenerating.value = false;
+                        }
+                    }, 50); // slight timeout for vue responsiveness
+                };
+
+                return {
+                    step,
+                    testName,
+                    numQuestions,
+                    questions,
+                    isGenerating,
+                    handleStartConfig,
+                    generatePDF
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
