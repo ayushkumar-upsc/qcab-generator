@@ -5,21 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UPSC CSE QCAB Generator</title>
     
-    <!-- 
-      Note: External CDN links are restored here so the app functions in this preview environment.
-      To prevent Supply Chain Risks in your final GitHub Pages deployment:
-      1. Download these three files.
-      2. Upload them to your GitHub repo.
-      3. Change the src attributes below to "./tailwindcss.js", "./vue.global.js", and "./jspdf.umd.min.js" 
-    -->
-    
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Vue 3 for reactivity -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     
-    <!-- jsPDF for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <style>
@@ -27,7 +16,6 @@
             background-color: #f3f4f6;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
-        /* Custom scrollbar for textareas */
         textarea::-webkit-scrollbar {
             width: 8px;
         }
@@ -35,14 +23,12 @@
             background-color: #cbd5e1;
             border-radius: 4px;
         }
-        /* Prevents uncompiled template elements from flashing on load */
         [v-cloak] {
             display: none;
         }
     </style>
 </head>
 <body>
-    <!-- Fallback error screen if libraries fail to load -->
     <div id="fallback-error" style="display: none; min-height: 100vh; background-color: #fef2f2; color: #991b1b; padding: 3rem; text-align: center; font-family: sans-serif;">
         <h2 style="font-size: 2rem; font-weight: bold; margin-bottom: 1rem;">Failed to Load Application</h2>
         <p style="font-size: 1.1rem; max-width: 600px; margin: 0 auto; line-height: 1.5;">
@@ -53,14 +39,12 @@
     </div>
 
     <div id="app" v-cloak class="min-h-screen pb-12 flex flex-col items-center">
-        <!-- Header -->
         <div class="w-full bg-slate-800 text-white p-6 shadow-md mb-8 text-center">
             <h1 class="text-3xl font-bold tracking-tight">UPSC CSE QCAB Generator</h1>
             <p class="text-slate-300 mt-2">Generate standard Question cum Answer Booklets</p>
         </div>
 
         <div class="w-full max-w-3xl px-4">
-            <!-- Step 1: Configuration -->
             <div v-if="step === 1" class="bg-white p-8 rounded-xl shadow-lg border border-slate-100">
                 <h2 class="text-2xl font-semibold mb-6 text-slate-800">Test Configuration</h2>
                 <form @submit.prevent="handleStartConfig">
@@ -105,7 +89,6 @@
                 </form>
             </div>
 
-            <!-- Step 2: Question Data -->
             <div v-if="step === 2" class="space-y-6">
                 <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <button 
@@ -129,14 +112,33 @@
                     
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Question Text</label>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Question Text (Optional if image is provided)</label>
                             <textarea
-                                required
-                                rows="3"
+                                rows="2"
                                 v-model="q.qText"
                                 placeholder="Enter question details here..."
                                 class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-y"
                             ></textarea>
+                        </div>
+
+                        <div class="p-4 border border-dashed border-slate-300 rounded-lg bg-slate-50">
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Attach Question Image (For Equations/Diagrams)</label>
+                            <input 
+                                type="file" 
+                                accept="image/png, image/jpeg, image/jpg"
+                                @change="handleImageUpload($event, index)"
+                                class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <div v-if="q.imagePreview" class="mt-3 relative inline-block">
+                                <img :src="q.imagePreview" class="max-h-32 rounded border border-slate-200 shadow-sm" />
+                                <button 
+                                    @click="removeImage(index)" 
+                                    class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow hover:bg-red-600"
+                                    title="Remove Image"
+                                >
+                                    &times;
+                                </button>
+                            </div>
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -161,6 +163,7 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="sticky bottom-6 bg-white p-4 rounded-xl shadow-xl border border-slate-200 flex flex-col items-end gap-3">
                     <div v-if="pdfErrorMessage" class="w-full p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
                         {{ pdfErrorMessage }}
@@ -191,7 +194,6 @@
                 const errorMessage = ref("");
                 const pdfErrorMessage = ref("");
                 
-                // Cache the fetched font so we don't re-download it every time
                 let cachedPTSerifBase64 = null;
 
                 const handleStartConfig = () => {
@@ -207,9 +209,43 @@
                         id: i,
                         qText: "",
                         marks: "10 Marks",
-                        pages: 2
+                        pages: 2,
+                        image: null,
+                        imagePreview: null,
+                        fileType: null
                     }));
                     step.value = 2;
+                };
+
+                // Read file via browser API
+                const handleImageUpload = (event, index) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    // Ensure it's an image
+                    if (!file.type.startsWith('image/')) {
+                        alert("Please upload a valid image file (PNG, JPG, JPEG).");
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        // e.target.result contains the Base64 Data URL
+                        questions.value[index].image = e.target.result;
+                        questions.value[index].imagePreview = e.target.result;
+                        
+                        // Extract file type for jsPDF (JPEG or PNG)
+                        let fType = 'JPEG';
+                        if (file.type === 'image/png') fType = 'PNG';
+                        questions.value[index].fileType = fType;
+                    };
+                    reader.readAsDataURL(file);
+                };
+
+                const removeImage = (index) => {
+                    questions.value[index].image = null;
+                    questions.value[index].imagePreview = null;
+                    questions.value[index].fileType = null;
                 };
 
                 const generatePDF = async () => {
@@ -220,16 +256,12 @@
                         const { jsPDF } = window.jspdf;
                         const doc = new jsPDF({ format: 'a4', unit: 'mm' });
                         
-                        // Try to load PT Serif dynamically
                         let mainFont = "times";
                         try {
                             if (!cachedPTSerifBase64) {
-                                // Fetch the TTF file directly from Google Fonts static domain
                                 const fontResponse = await fetch('https://fonts.gstatic.com/s/ptserif/v18/EJRVQgYoZZY2vCFuvDFRxL6ddA.ttf');
                                 if (fontResponse.ok) {
                                     const buffer = await fontResponse.arrayBuffer();
-                                    
-                                    // Convert ArrayBuffer to Base64 safely
                                     let binary = '';
                                     const bytes = new Uint8Array(buffer);
                                     for (let i = 0; i < bytes.byteLength; i++) {
@@ -238,8 +270,6 @@
                                     cachedPTSerifBase64 = window.btoa(binary);
                                 }
                             }
-                            
-                            // If successfully fetched (or cached), add it to jsPDF
                             if (cachedPTSerifBase64) {
                                 doc.addFileToVFS('PTSerif-Regular.ttf', cachedPTSerifBase64);
                                 doc.addFont('PTSerif-Regular.ttf', 'PTSerif', 'normal');
@@ -249,30 +279,24 @@
                             console.warn("Could not load PT Serif font, falling back to Times.", fontError);
                         }
 
-                        // A4 Dimensions in mm
                         const pageWidth = 210;
                         const pageHeight = 297;
                         
-                        // Layout Settings
                         const leftMargin = 25;
                         const topMargin = 15;
-                        const rightMargin = pageWidth - 25; // 185
-                        const bottomMargin = pageHeight - 15; // 282
+                        const rightMargin = pageWidth - 25; 
+                        const bottomMargin = pageHeight - 15; 
 
                         const drawLayout = (footerMark) => {
                             doc.setDrawColor(0, 0, 0);
                             doc.setLineWidth(0.3);
-                            
-                            // Lines
                             doc.line(leftMargin, topMargin, leftMargin, bottomMargin);
                             doc.line(rightMargin, topMargin, rightMargin, bottomMargin);
                             
-                            // Footer (Always Times, Italic)
                             doc.setFont("times", "italic");
                             doc.setFontSize(12);
                             doc.text(footerMark, leftMargin - 10, bottomMargin + 5);
                             
-                            // Right Side Warning Text (Always Times, Normal)
                             doc.setFont("times", "normal");
                             doc.setFontSize(9);
                             const warningText = "Candidates must not write on this margin";
@@ -290,25 +314,45 @@
                                 
                                 drawLayout(testName.value);
 
-                                // Print the question text only on the FIRST page allocated
                                 if (i === 0) {
-                                    // Question Number (PT Serif)
                                     doc.setFont(mainFont, "normal");
                                     doc.setFontSize(12);
                                     doc.text(`Q. ${qIndex + 1}`, leftMargin - 15, topMargin + 5, { align: 'center' });
 
-                                    // Question Text (PT Serif)
+                                    let currentY = topMargin + 5;
                                     const qTextX = leftMargin + 2;
-                                    const qTextY = topMargin + 5;
                                     const qTextWidth = rightMargin - leftMargin - 4;
-                                    
-                                    doc.text(q.qText, qTextX, qTextY, { maxWidth: qTextWidth, align: 'justify' });
 
-                                    // Marks Stamp (PT Serif)
-                                    if (q.marks) {
+                                    // Render Text (if provided)
+                                    if (q.qText && q.qText.trim() !== "") {
+                                        doc.text(q.qText, qTextX, currentY, { maxWidth: qTextWidth, align: 'justify' });
                                         const textDims = doc.getTextDimensions(q.qText, { maxWidth: qTextWidth });
-                                        const marksY = qTextY + textDims.h + 5;
-                                        doc.text(`[${q.marks}]`, rightMargin - 2, marksY, { align: 'right' });
+                                        currentY += textDims.h + 5; // move Y down for next element
+                                    }
+
+                                    // Render Image (if provided)
+                                    if (q.image) {
+                                        // Get actual dimensions to preserve aspect ratio
+                                        const imgProps = doc.getImageProperties(q.image);
+                                        const imgRatio = imgProps.width / imgProps.height;
+                                        
+                                        let renderWidth = qTextWidth; // Scale to fit margin width
+                                        let renderHeight = renderWidth / imgRatio;
+
+                                        // Ensure it doesn't overflow the bottom of the page
+                                        const maxAvailableHeight = bottomMargin - currentY - 15;
+                                        if (renderHeight > maxAvailableHeight) {
+                                            renderHeight = maxAvailableHeight;
+                                            renderWidth = renderHeight * imgRatio;
+                                        }
+
+                                        doc.addImage(q.image, q.fileType, qTextX, currentY, renderWidth, renderHeight);
+                                        currentY += renderHeight + 5; // move Y down for marks
+                                    }
+
+                                    // Render Marks Stamp
+                                    if (q.marks) {
+                                        doc.text(`[${q.marks}]`, rightMargin - 2, currentY, { align: 'right' });
                                     }
                                 }
                             }
@@ -333,16 +377,16 @@
                     errorMessage,
                     pdfErrorMessage,
                     handleStartConfig,
+                    handleImageUpload,
+                    removeImage,
                     generatePDF
                 };
             }
         }).mount('#app');
     </script>
 
-    <!-- Native library check to ensure scripts loaded -->
     <script>
         window.addEventListener('load', function() {
-            // Check if our core libraries are attached to the window object
             if (typeof Vue === 'undefined' || typeof window.jspdf === 'undefined' || typeof tailwind === 'undefined') {
                 document.getElementById('app').style.display = 'none';
                 document.getElementById('fallback-error').style.display = 'block';
