@@ -5,10 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UPSC CSE QCAB Generator</title>
     
+    <!-- 
+      Note: External CDN links are restored here so the app functions in this preview environment.
+      To prevent Supply Chain Risks in your final GitHub Pages deployment:
+      1. Download these three files.
+      2. Upload them to your GitHub repo.
+      3. Change the src attributes below to "./tailwindcss.js", "./vue.global.js", and "./jspdf.umd.min.js" 
+    -->
+    
+    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Vue 3 for reactivity -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     
+    <!-- jsPDF for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <style>
@@ -45,6 +56,7 @@
         </div>
 
         <div class="w-full max-w-3xl px-4">
+            <!-- Step 1: Configuration -->
             <div v-if="step === 1" class="bg-white p-8 rounded-xl shadow-lg border border-slate-100">
                 <h2 class="text-2xl font-semibold mb-6 text-slate-800">Test Configuration</h2>
                 <form @submit.prevent="handleStartConfig">
@@ -89,6 +101,7 @@
                 </form>
             </div>
 
+            <!-- Step 2: Question Data -->
             <div v-if="step === 2" class="space-y-6">
                 <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <button 
@@ -111,23 +124,33 @@
                     </div>
                     
                     <div class="space-y-4">
+                        <!-- Text Input -->
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Question Text (Optional if image is provided)</label>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">
+                                Question Text <span v-if="q.imagePreview" class="text-red-500 text-xs font-normal ml-2">(Clear image to type text)</span>
+                            </label>
                             <textarea
                                 rows="2"
                                 v-model="q.qText"
+                                :disabled="!!q.imagePreview"
+                                :class="q.imagePreview ? 'bg-slate-100 cursor-not-allowed text-slate-400' : 'bg-white text-slate-900'"
                                 placeholder="Enter question details here..."
                                 class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-y"
                             ></textarea>
                         </div>
 
-                        <div class="p-4 border border-dashed border-slate-300 rounded-lg bg-slate-50">
-                            <label class="block text-sm font-medium text-slate-700 mb-2">Attach Question Image (For Equations/Diagrams)</label>
+                        <!-- Image Upload Input -->
+                        <div class="p-4 border border-dashed border-slate-300 rounded-lg" :class="q.qText.trim().length > 0 ? 'bg-slate-100 opacity-60' : 'bg-slate-50'">
+                            <label class="block text-sm font-medium text-slate-700 mb-2">
+                                Attach Question Image (For Equations/Diagrams) <span v-if="q.qText.trim().length > 0" class="text-red-500 text-xs font-normal ml-2">(Clear text to upload image)</span>
+                            </label>
                             <input 
                                 type="file" 
                                 accept="image/png, image/jpeg, image/jpg"
                                 @change="handleImageUpload($event, index)"
-                                class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                :disabled="q.qText.trim().length > 0"
+                                :class="q.qText.trim().length > 0 ? 'cursor-not-allowed' : 'hover:file:bg-blue-100'"
+                                class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 transition-all"
                             />
                             <div v-if="q.imagePreview" class="mt-3 relative inline-block">
                                 <img :src="q.imagePreview" class="max-h-32 rounded border border-slate-200 shadow-sm" />
@@ -141,6 +164,7 @@
                             </div>
                         </div>
                         
+                        <!-- Marks and Pages -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Marks Stamp</label>
@@ -246,6 +270,10 @@
                     questions.value[index].image = null;
                     questions.value[index].imagePreview = null;
                     questions.value[index].fileType = null;
+                    
+                    // Reset input element value to allow re-upload of the same image if needed
+                    const input = document.querySelectorAll('input[type="file"]')[index];
+                    if (input) input.value = '';
                 };
 
                 const generatePDF = async () => {
@@ -323,14 +351,7 @@
                                     const qTextX = leftMargin + 2;
                                     const qTextWidth = rightMargin - leftMargin - 4;
 
-                                    // Render Text (if provided)
-                                    if (q.qText && q.qText.trim() !== "") {
-                                        doc.text(q.qText, qTextX, currentY, { maxWidth: qTextWidth, align: 'justify' });
-                                        const textDims = doc.getTextDimensions(q.qText, { maxWidth: qTextWidth });
-                                        currentY += textDims.h + 5; // move Y down for next element
-                                    }
-
-                                    // Render Image (if provided)
+                                    // Render Image or Text (Exclusively)
                                     if (q.image) {
                                         // Get actual dimensions to preserve aspect ratio
                                         const imgProps = doc.getImageProperties(q.image);
@@ -348,6 +369,10 @@
 
                                         doc.addImage(q.image, q.fileType, qTextX, currentY, renderWidth, renderHeight);
                                         currentY += renderHeight + 5; // move Y down for marks
+                                    } else if (q.qText && q.qText.trim() !== "") {
+                                        doc.text(q.qText, qTextX, currentY, { maxWidth: qTextWidth, align: 'justify' });
+                                        const textDims = doc.getTextDimensions(q.qText, { maxWidth: qTextWidth });
+                                        currentY += textDims.h + 5; // move Y down for marks
                                     }
 
                                     // Render Marks Stamp
